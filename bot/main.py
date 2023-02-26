@@ -1,41 +1,25 @@
 import os
+import requests
 
 from aiogram import Bot, Dispatcher, executor, types
 from aiogram.utils import executor
 from aiogram.dispatcher import Dispatcher
-from aiogram.types.message import ContentType
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.types.message import ContentType
 import sqlite3
 import gspread
 import pandas as pd
 from oauth2client.service_account import ServiceAccountCredentials
 from loguru import logger
-import requests
+from dotenv import load_dotenv, find_dotenv
 
+load_dotenv(find_dotenv())
 
 logger.add("bot/logs/debug.log", format="{time} {level} {message}", level="DEBUG", rotation="10 MB", compression="zip")
 
-TELEGRAM_API_TOKEN = os.getenv("TELEGRAM_API_TOKEN")
+TELEGRAM_API_TOKEN = os.getenv('TELEGRAM_API_TOKEN')
 TELEGRAM_PAYMENTS_PROVIDER_TOKEN = os.getenv("TELEGRAM_PAYMENTS_PROVIDER_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
-
-# Указываем путь к JSON
-gc = gspread.service_account(filename='keys/сredentials.json')
-
-# Открываем таблицу
-sh = gc.open_by_url('https://docs.google.com/spreadsheets/d/1AwXXCO4_LIyls0nAh-DaOuD81C6rAIIdk6iSrLROkmY/edit#gid=0')
-
-scope = ['https://www.googleapis.com/auth/spreadsheets', "https://www.googleapis.com/auth/drive"]
-
-credentials = ServiceAccountCredentials.from_json_keyfile_name("keys/сredentials.json", scope)
-client = gspread.authorize(credentials)
-sheet = client.open_by_url('https://docs.google.com/spreadsheets/d/1AwXXCO4_LIyls0nAh-DaOuD81C6rAIIdk6iSrLROkmY').worksheet("Меню").get_values()
-df =  pd.DataFrame.from_dict(sheet)
-
-sheet_dobavki = client.open_by_url('https://docs.google.com/spreadsheets/d/1AwXXCO4_LIyls0nAh-DaOuD81C6rAIIdk6iSrLROkmY').worksheet("Добавки").get_values()
-df_dobavki =  pd.DataFrame.from_dict(sheet_dobavki)
-
-TOKEN = '6276457543:AAFGKiu224xSr9wgTB_pp-DU8hOB4n2N_IA'
 
 TEXT_START = """
 🙌🏼 С помощью этого бота вы можете сделать заказ в нашей кофейне
@@ -44,7 +28,29 @@ TEXT_START = """
 🎯 Можно еще делать заказы и без оплаты, но это только для своих (тсс..)
 """
 
-bot = Bot(TOKEN)
+
+scope = ['https://www.googleapis.com/auth/spreadsheets', "https://www.googleapis.com/auth/drive"]
+
+credentials = ServiceAccountCredentials.from_json_keyfile_name("C:/Users/79858/Documents/1-git/tg-bot-coffee/bot/keys/сredentials.json", scope)
+client = gspread.authorize(credentials)
+
+
+def update_sheet():
+    df = pd.DataFrame.from_dict(client.open_by_url('https://docs.google.com/spreadsheets/d/1AwXXCO4_LIyls0nAh-DaOuD81C6rAIIdk6iSrLROkmY').worksheet("Меню").get_values())
+    return df
+
+
+df = update_sheet()
+
+
+def update_dobavki():
+    df_dobavki =  pd.DataFrame.from_dict(client.open_by_url('https://docs.google.com/spreadsheets/d/1AwXXCO4_LIyls0nAh-DaOuD81C6rAIIdk6iSrLROkmY').worksheet("Добавки").get_values())
+    return df_dobavki
+
+
+df_dobavki = update_dobavki()
+
+bot = Bot(TELEGRAM_API_TOKEN)
 dp = Dispatcher(bot=bot)
 
 photo = 'https://bobycafe.com/uploads/menu//01_%D0%9A%D0%BE%D1%84%D0%B5/%D0%BA%D0%BE%D1%84%D0%B5.png'
@@ -54,23 +60,15 @@ ib1_start = InlineKeyboardButton(text='✅ Ясно, дальше', callback_dat
 ikb_start.add(ib1_start)
 
 
-
-
-
-
 @logger.catch
 def send_to_telegram(message):
-
-    apiToken = TELEGRAM_API_TOKEN
     chatID = TELEGRAM_CHAT_ID
-    apiURL = f'https://api.telegram.org/bot{apiToken}/sendMessage'
-
+    apiURL = f'https://api.telegram.org/bot{TELEGRAM_API_TOKEN}/sendMessage'
     try:
         response = requests.get(apiURL, json={'chat_id': chatID, 'text': message})
         print(response.text)
     except Exception as e:
         print(e)
-
 
 
 @logger.catch
@@ -79,7 +77,10 @@ def create_order(callback):
     print('Колбэк:', callback.data)
 
     global df
-    df =  pd.DataFrame.from_dict(sheet)
+    df = update_sheet()
+
+    global df_dobavki
+    df_dobavki = update_dobavki()
 
     # Беру все ID, которые TRUE
     data_level_category_id = list(df.loc[(df[1] == 'TRUE')][0])
@@ -133,28 +134,6 @@ async def start(message: types.Message):
     await bot.send_message(chat_id=user_id,
                            text=f'🤘🏼 Привет, {user_full_name}!\n{TEXT_START}',
                            reply_markup=ikb_start)
-
-
-@logger.catch
-@dp.message_handler(commands=['menu'])
-async def menu(message: types.Message):
-
-    ikb = InlineKeyboardMarkup(row_width=1)
-    ib1 = InlineKeyboardButton(text='Сделать заказ',
-                               callback_data='order')
-    ib2 = InlineKeyboardButton(text='Посмотреть заказы',
-                               callback_data='order_check')
-    
-    ikb.add(ib1, ib2)
-    user_id = message.from_user.id
-
-    await bot.send_photo(chat_id=user_id,
-                         photo=photo,
-                         reply_markup=ikb)
-
-    # await bot.send_message(chat_id=user_id,
-    #                        text='Heloo World!',
-    #                        reply_markup=ikb)
 
 
 # pre checkout  (must be answered in 10 seconds)
@@ -712,4 +691,3 @@ async def vote_callback(callback: types.CallbackQuery):
 
 if __name__ == '__main__':
     executor.start_polling(dp, skip_updates=False)
-    # executor.start_polling(dp)
