@@ -1,0 +1,9 @@
+version: "3"
+
+services:
+  my_app:
+    build: ./bot
+    env_file:
+      - .env
+    volumes:
+      - ./db:/usr/src/app/db

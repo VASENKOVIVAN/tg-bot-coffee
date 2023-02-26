@@ -1,0 +1,5 @@
+aiogram
+gspread
+pandas
+oauth2client
+loguru
